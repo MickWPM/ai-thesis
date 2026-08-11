@@ -31,5 +31,6 @@ Once we have the structure for the above complete, the robust next step is to ru
 
 ## Current results
 
-Phase 1 is progressing well and it is fascinating seeing the probability distributions unfold. There does appear to be some early deviaitons between distributions; this could be a result of agent training robustness, goal spread or just the impacts of Monte Carlo sampling. 
+Phase 1 is progressing well and it is fascinating seeing the probability distributions unfold. Preliminary experimenting shows that we sometimes end up with key differences between inferred trajectories and live trajectories; this is generally mitigated by increased training but can also be indicative of poor goal spread. More generally this is an aspect which we look much further into, particularly in Phase 3
 
+<img width="1386" height="624" alt="image" src="https://github.com/user-attachments/assets/9d76d472-aa8f-4cc8-9dad-fc558be466a8" />
