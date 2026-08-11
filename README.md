@@ -33,4 +33,7 @@ Once we have the structure for the above complete, the robust next step is to ru
 
 Phase 1 is progressing well and it is fascinating seeing the probability distributions unfold. Preliminary experimenting shows that we sometimes end up with key differences between inferred trajectories and live trajectories; this is generally mitigated by increased training but can also be indicative of poor goal spread. More generally this is an aspect which we look much further into, particularly in Phase 3
 
-<img width="1386" height="624" alt="image" src="https://github.com/user-attachments/assets/9d76d472-aa8f-4cc8-9dad-fc558be466a8" />
+This image is an example of the resulting probabiilty distribution from 100000 trajectories in both the inferred model (P hat) and the live agent in the environment.
+
+<img width="1193" height="536" alt="comparison" src="https://github.com/user-attachments/assets/0b1836f4-27e0-4a3f-ab29-794e8a1a8d1a" />
+
