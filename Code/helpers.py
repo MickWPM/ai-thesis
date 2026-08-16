@@ -3,7 +3,8 @@ from goal_conditioned_training import make_goal_rewards, train_goal_conditioned_
 
 def get_inverted_model(environment, goals=None, starts=None, 
                        gamma=0.99, reward_perturbation=0.01,
-                       n_episodes=50_000, max_steps=200):
+                       n_episodes=50_000, max_steps=200,
+                       seed_rewards=32, seed_train=8):
     if goals is None:
         goals = list(environment.states)
     else:
@@ -14,7 +15,7 @@ def get_inverted_model(environment, goals=None, starts=None,
       environment,
       goals,
       perturbation=reward_perturbation,
-      seed=32,
+      seed=seed_rewards,
     )
 
     Q, visits, success_history = (
@@ -27,7 +28,7 @@ def get_inverted_model(environment, goals=None, starts=None,
           n_episodes=n_episodes,
           max_steps=max_steps,
           gamma=gamma,
-          seed=8,
+          seed=seed_train,
         )
     )
 
