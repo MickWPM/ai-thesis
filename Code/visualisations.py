@@ -126,3 +126,163 @@ def show_distribution_comparison(env, model_distributions, environment_distribut
   )
 
   plt.show()
+
+
+#This function generated as a standalone visualisation helper using Gemini
+def plot_seeded_phase1_metrics(
+    metric_df,
+    goal_state,
+    start_state,
+):
+    fig, axes = plt.subplots(
+        1,
+        3,
+        figsize=(18, 5),
+    )
+
+    def plot_metric_band(
+        ax,
+        column,
+        title,
+        ylabel,
+        colour,
+    ):
+        values = metric_df.pivot(
+            index="step",
+            columns="training seed",
+            values=column,
+        )
+
+        # Show every individual training seed faintly.
+        for seed in values.columns:
+            ax.plot(
+                values.index,
+                values[seed],
+                color=colour,
+                alpha=0.18,
+                linewidth=1,
+            )
+
+        mean = values.mean(axis=1)
+        minimum = values.min(axis=1)
+        maximum = values.max(axis=1)
+
+        ax.fill_between(
+            values.index,
+            minimum,
+            maximum,
+            color=colour,
+            alpha=0.2,
+            label="Seed min–max",
+        )
+
+        ax.plot(
+            values.index,
+            mean,
+            color=colour,
+            linewidth=2.5,
+            label="Seed mean",
+        )
+
+        ax.set_title(title)
+        ax.set_xlabel("Prediction step")
+        ax.set_ylabel(ylabel)
+        ax.grid(alpha=0.3)
+
+        # Place the legend outside the graph.
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.17),
+            ncol=2,
+            frameon=False,
+        )
+
+    plot_metric_band(
+        axes[0],
+        column="trajectory TV",
+        title="Exact trajectory TV",
+        ylabel="TV distance",
+        colour="tab:blue",
+    )
+
+    axes[0].set_ylim(bottom=0.0, top=1.0)
+
+    plot_metric_band(
+        axes[1],
+        column="trajectory KL",
+        title="Exact trajectory KL",
+        ylabel="KL divergence",
+        colour="tab:orange",
+    )
+
+    true_values = metric_df.pivot(
+        index="step",
+        columns="training seed",
+        values="true goal probability",
+    )
+
+    inferred_values = metric_df.pivot(
+        index="step",
+        columns="training seed",
+        values="inferred goal probability",
+    )
+
+    for values, colour, label in [
+        (true_values, "black", "True kernel"),
+        (
+            inferred_values,
+            "tab:purple",
+            "Inferred model",
+        ),
+    ]:
+        mean = values.mean(axis=1)
+        minimum = values.min(axis=1)
+        maximum = values.max(axis=1)
+
+        # Individual seed curves.
+        for seed in values.columns:
+            axes[2].plot(
+                values.index,
+                values[seed],
+                color=colour,
+                alpha=0.10,
+                linewidth=1,
+            )
+
+        axes[2].fill_between(
+            values.index,
+            minimum,
+            maximum,
+            color=colour,
+            alpha=0.15,
+        )
+
+        axes[2].plot(
+            values.index,
+            mean,
+            color=colour,
+            linewidth=2.5,
+            label=f"{label} mean",
+        )
+
+    axes[2].set_title("Goal-reaching probability")
+    axes[2].set_xlabel("Prediction step")
+    axes[2].set_ylabel("Probability reached")
+    axes[2].set_ylim(0.0, 1.0)
+    axes[2].grid(alpha=0.3)
+
+    axes[2].legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.17),
+        ncol=2,
+        frameon=False,
+    )
+
+    fig.suptitle(
+        f"Training-seed variation: "
+        f"start {start_state}, goal {goal_state}",
+        fontsize=15,
+    )
+
+    plt.tight_layout(rect=(0, 0.08, 1, 0.94))
+    plt.show()
