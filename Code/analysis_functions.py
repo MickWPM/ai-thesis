@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from scipy.stats import entropy
-from inverse_prediction import get_exact_step_distributions, build_environment_kernel
+from inverse_prediction import get_exact_step_distributions, build_environment_kernel, get_exact_policy_distributions
+
 
 def state_distribution_to_environment_distribution(state_distribution, env):
   distribution = np.zeros(env.n_states)
@@ -92,3 +93,31 @@ def evaluate_seeded_models_exact(env, seeded_models, goals, goal_index, n_steps,
     distributions_by_seed[seed] = {"true": true_exact, "inferred": model_exact}
 
   return (pd.DataFrame(metric_rows),pd.DataFrame(summary_rows), distributions_by_seed, P_true)
+
+
+#Refactored backwards compatable function - updates to original intgrated from Gemini proposed refactor
+def compare_policy_kernels_exact(env, policy, reference_kernel, candidate_kernel, start_state, goal_state, n_steps, kl_epsilon=1e-12):
+    reference = get_exact_policy_distributions(env, reference_kernel, policy, goal_state, n_steps, start_state)
+    candidate = get_exact_policy_distributions(env, candidate_kernel, policy, goal_state, n_steps, start_state)
+
+    tv = (0.5 * np.abs(reference - candidate).sum(axis=1))
+
+    reference_kl = np.clip(reference, kl_epsilon, None)
+    candidate_kl = np.clip(candidate, kl_epsilon, None)
+    reference_kl /= reference_kl.sum(axis=1, keepdims=True)
+    candidate_kl /= candidate_kl.sum(axis=1, keepdims=True)
+    kl = np.sum(reference_kl * (np.log(reference_kl) - np.log(candidate_kl)), axis=1)
+
+    goal_index = env.state_to_index[goal_state]
+    reference_goal = reference[:, goal_index]
+    candidate_goal = candidate[:, goal_index]
+
+    return {
+        "reference distributions": reference,
+        "candidate distributions": candidate,
+        "trajectory TV": tv,
+        "trajectory KL": kl,
+        "reference goal curve": reference_goal,
+        "candidate goal curve": candidate_goal,
+        "goal error": np.abs(reference_goal - candidate_goal),
+        "goal bias": (candidate_goal - reference_goal)}
