@@ -67,28 +67,6 @@ def build_environment_kernel(env):
   return kernel
 
 
-# def get_exact_step_distributions(env, kernel, Q, goal_index, goal_state, n_steps, start_state=None):
-#     if start_state is None: 
-#       start_state = env.start_state
-#     kernel = np.asarray(kernel, dtype=float)
-#     policy_actions = np.argmax(Q[goal_index], axis=-1)
-
-#     policy_kernel = kernel[np.arange(env.n_states), policy_actions].copy()
-#     goal_state_index = env.state_to_index[goal_state]
-
-#     policy_kernel[goal_state_index] = 0.0
-#     policy_kernel[goal_state_index, goal_state_index] = 1.0
-
-#     distributions = np.zeros((n_steps + 1, env.n_states), dtype=float)
-
-#     start_index = env.state_to_index[start_state]
-#     distributions[0, start_index] = 1.0
-
-#     for step in range(n_steps):
-#         distributions[step + 1] = (distributions[step] @ policy_kernel)
-
-#     return distributions
-
 #Wrapper to keep Phase 1 backward compatability
 def get_exact_step_distributions(env, kernel, Q, goal_index, goal_state, n_steps, start_state=None):
     policy = greedy_policy_from_q(Q,goal_index)
@@ -168,5 +146,22 @@ def get_exact_policy_distributions(env, kernel, policy, goal_state, n_steps, sta
   distributions[0, start_index] = 1.0
   for step in range(n_steps):
     distributions[step + 1] = (distributions[step] @ policy_kernel)
+
+  return distributions
+
+def greedy_policy_from_q(Q, goal_index):
+  return np.argmax(Q[goal_index], axis=-1).astype(int)
+
+
+def get_exact_policy_distributions(env, kernel, policy, goal_state, n_steps, start_state):
+  policy_kernel = np.asarray(kernel, dtype=float)[np.arange(env.n_states), policy].copy()
+  goal_index = env.state_to_index[goal_state]
+  policy_kernel[goal_index] = 0.0
+  policy_kernel[goal_index, goal_index] = 1.0
+
+  distributions = np.zeros((n_steps + 1, env.n_states))
+  distributions[0, env.state_to_index[start_state]] = 1.0
+  for step in range(n_steps):
+    distributions[step + 1] = distributions[step] @ policy_kernel
 
   return distributions

@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.stats import entropy
-from inverse_prediction import get_exact_step_distributions, build_environment_kernel, get_exact_policy_distributions
-
+from inverse_prediction import get_exact_step_distributions, build_environment_kernel, get_exact_policy_distributions, greedy_policy_from_q
 
 def state_distribution_to_environment_distribution(state_distribution, env):
   distribution = np.zeros(env.n_states)
@@ -121,3 +120,86 @@ def compare_policy_kernels_exact(env, policy, reference_kernel, candidate_kernel
         "candidate goal curve": candidate_goal,
         "goal error": np.abs(reference_goal - candidate_goal),
         "goal bias": (candidate_goal - reference_goal)}
+
+def compare_exact_distributions(reference, candidate, goal_index, epsilon=1e-12):
+  tv = 0.5 * np.abs(reference - candidate).sum(axis=1)
+
+  reference_kl = np.clip(reference, epsilon, None)
+  candidate_kl = np.clip(candidate, epsilon, None)
+  reference_kl /= reference_kl.sum(axis=1, keepdims=True)
+  candidate_kl /= candidate_kl.sum(axis=1, keepdims=True)
+  kl = np.sum(reference_kl * np.log(reference_kl / candidate_kl), axis=1)
+
+  reference_goal = reference[:, goal_index]
+  candidate_goal = candidate[:, goal_index]
+  goal_error = np.abs(reference_goal - candidate_goal)
+  goal_bias = candidate_goal - reference_goal
+
+  return {
+        "trajectory TV": tv[1:].mean(),
+        "maximum trajectory TV": tv[1:].max(),
+        "final trajectory TV": tv[-1],
+        "trajectory KL": kl[1:].mean(),
+        "goal-curve MAE": goal_error[1:].mean(),
+        "final goal error": goal_error[-1],
+        "final goal bias": goal_bias[-1],
+    }
+
+def qualify_trained_policies(env, runs, true_kernel, n_steps, POLICY_SUCCESS_THRESHOLD):
+  rows = []
+  for run in runs:
+    for goal_index, goal_state in enumerate(run["goals"]):
+      policy = greedy_policy_from_q(run["Q"], goal_index)
+      state_goal_index = env.state_to_index[goal_state]
+      for start_state in run["starts"]:
+        distributions = get_exact_policy_distributions(env, true_kernel, policy, goal_state, n_steps, start_state)
+        curve = distributions[:, state_goal_index]
+        rows.append({
+                "training seed": run["training seed"],
+                "agent": run["name"],
+                "goal": goal_state,
+                "start": start_state,
+                "final success": curve[-1],
+                "goal-curve AUC": curve[1:].mean(),
+                "mean capped steps": np.sum(1.0 - curve[:-1]),
+                "qualified": curve[-1] >= POLICY_SUCCESS_THRESHOLD,
+            })
+  return pd.DataFrame(rows)
+
+
+def evaluate_cross_models(env, runs, true_kernel, n_steps):
+  rows = []
+
+  for training_seed in sorted({run["training seed"] for run in runs}):
+    seeded_runs = [run for run in runs if run["training seed"] == training_seed]
+
+    for source in seeded_runs:
+      for goal_index, goal_state in enumerate(source["goals"]):
+        policy = greedy_policy_from_q(source["Q"], goal_index)
+        state_goal_index = env.state_to_index[goal_state]
+
+        for start_state in source["starts"]:
+          own_reference = get_exact_policy_distributions(env, source["P_hat"], policy, goal_state, n_steps, start_state)
+          true_reference = get_exact_policy_distributions(env, true_kernel, policy, goal_state, n_steps, start_state)
+
+          for candidate in seeded_runs:
+            candidate_distribution = get_exact_policy_distributions(env, candidate["P_hat"], policy, goal_state, n_steps, start_state)
+            internal = compare_exact_distributions(own_reference, candidate_distribution, state_goal_index)
+            external = compare_exact_distributions(true_reference, candidate_distribution, state_goal_index)
+            row = {
+                "training seed": training_seed,
+                "candidate model": candidate["name"],
+                "source policy": source["name"],
+                "goal": goal_state,
+                "start": start_state,
+            }
+            row.update({f"internal {key}": value for key, value in internal.items()})
+            row.update({f"true {key}": value for key, value in external.items()})
+            rows.append(row)
+
+    print(f"Completed cross-model assessment for seed {training_seed}")
+
+  return pd.DataFrame(rows)
+
+def cross_matrix(results, metric, AGENT_NAMES):
+  return results.groupby(["candidate model", "source policy"])[metric].mean().unstack().reindex(index=AGENT_NAMES, columns=AGENT_NAMES)

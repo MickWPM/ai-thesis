@@ -101,3 +101,16 @@ def train_goal_conditioned_agent(env, rewards, done,
         break
 
   return Q, visits, success_history
+
+
+def make_physical_goal_rewards(env, goals, perturbation=0.01, seed=32):
+  rewards = np.zeros((len(goals), env.n_states), dtype=float)
+  done = np.zeros_like(rewards, dtype=bool)
+
+  for goal_index, goal_state in enumerate(goals):
+    state_index = env.state_to_index[goal_state]
+    rng = np.random.default_rng(seed + 10_007 * state_index)
+    rewards[goal_index] = -rng.uniform(0.0, perturbation, size=env.n_states)
+    rewards[goal_index, state_index] += 1.0
+    done[goal_index, state_index] = True
+  return rewards, done

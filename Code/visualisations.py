@@ -1,5 +1,8 @@
+#Large portions of this script refactored or developed with Gemini support for aesthetics
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
+from inverse_prediction import greedy_policy_from_q, get_exact_policy_distributions
 
 
 def make_probability_grid(env, distribution):
@@ -128,7 +131,6 @@ def show_distribution_comparison(env, model_distributions, environment_distribut
   plt.show()
 
 
-#This function generated as a standalone visualisation helper using Gemini
 def plot_seeded_phase1_metrics(
     metric_df,
     goal_state,
@@ -286,3 +288,111 @@ def plot_seeded_phase1_metrics(
 
     plt.tight_layout(rect=(0, 0.08, 1, 0.94))
     plt.show()
+
+def plot_training_setup(env, agent_definitions, held_out_goals):
+    room_colours = {
+        "south-west": "#a8ddb5",
+        "north-west": "#b3cde3",
+        "south-east": "#fdd0a2",
+        "north-east": "#d4b9da",
+        "doorway": "#d9d9d9",
+    }
+    fig, axes = plt.subplots(1, len(agent_definitions), figsize=(20, 4.3), sharex=True, sharey=True)
+
+    for ax, (name, definition) in zip(axes, agent_definitions.items()):
+        for state in env.states:
+            ax.scatter(*state, marker="s", s=85, color=room_colours[env._get_room(state)], alpha=0.75)
+
+        goals = np.asarray(definition["goals"])
+        starts = np.asarray(definition["starts"])
+        held_out = np.asarray(held_out_goals)
+        ax.scatter(goals[:, 0], goals[:, 1], color="tab:red", s=55, zorder=3)
+        ax.scatter(starts[:, 0], starts[:, 1], color="black", marker="x", s=70, linewidth=2, zorder=4)
+        ax.scatter(held_out[:, 0], held_out[:, 1], color="dimgray", marker="*", s=65, zorder=2)
+        ax.set_title(name)
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.set_xticks(range(11))
+        ax.set_yticks(range(11))
+        ax.set_aspect("equal")
+
+    handles = [
+        Line2D([], [], marker="o", linestyle="", color="tab:red", label="training goal"),
+        Line2D([], [], marker="x", linestyle="", color="black", label="training start"),
+        Line2D([], [], marker="*", linestyle="", color="dimgray", label="held-out goal (Phase 3 only)"),
+    ]
+    fig.suptitle("Phase 2 training distributions", fontsize=15)
+    fig.legend(handles=handles, loc="lower center", ncol=3, frameon=False)
+    plt.tight_layout(rect=(0, 0.10, 1, 0.92))
+    plt.show()
+
+def plot_visit_maps(env, runs, agents_to_be_trained):
+    visit_maps = {}
+    maximum = 0.0
+    agent_names = list(agents_to_be_trained)
+    for name in agent_names:
+        state_visits = sum(
+            run["visits"].sum(axis=(0, 2))
+            for run in runs if run["name"] == name
+        )
+        visit_maps[name] = np.log1p(state_visits)
+        maximum = max(maximum, visit_maps[name].max())
+
+    fig, axes = plt.subplots(1, len(agent_names), figsize=(20, 4.3), sharex=True, sharey=True)
+    image = None
+
+    for ax, name in zip(axes, agent_names):
+        grid = np.full((env.dimensions, env.dimensions), np.nan)
+        for state, value in zip(env.states, visit_maps[name]):
+            grid[state[1], state[0]] = value
+        image = ax.imshow(grid, origin="lower", cmap="magma", vmin=0.0, vmax=maximum)
+        definition = agents_to_be_trained[name]
+        goals = np.asarray(definition["goals"])
+        starts = np.asarray(definition["starts"])
+        ax.scatter(goals[:, 0], goals[:, 1], facecolors="none", edgecolors="cyan", s=60)
+        ax.scatter(starts[:, 0], starts[:, 1], color="white", marker="x", s=50)
+        ax.set_title(name)
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.set_aspect("equal")
+
+    fig.colorbar(image, ax=axes, orientation="horizontal", fraction=0.05, pad=0.13, label="log(1 + state visits)")
+    fig.suptitle("Training visitation across seeds", fontsize=15)
+    fig.subplots_adjust(bottom=0.24, top=0.83, wspace=0.16)
+    plt.show()
+
+def show_phase2_trajectory_demo(env, runs, true_kernel, source_agent, goal_state, start_state, training_seed, steps=(1, 5, 10, 20), candidate_model=None):
+  source = next(run for run in runs if run["training seed"] == training_seed and run["name"] == source_agent)
+  candidate_name = source_agent if candidate_model is None else candidate_model
+  candidate = next(run for run in runs if run["training seed"] == training_seed and run["name"] == candidate_name)
+  goal_index = source["goals"].index(goal_state)
+  policy = greedy_policy_from_q(source["Q"], goal_index)
+  true_distributions = get_exact_policy_distributions(env, true_kernel, policy, goal_state, max(steps), start_state)
+  model_distributions = get_exact_policy_distributions(env, candidate["P_hat"], policy, goal_state, max(steps), start_state)
+
+  fig, axes = plt.subplots(2, len(steps), figsize=(4.2 * len(steps), 8.2), sharex=True, sharey=True)
+  image = None
+
+  for column, step in enumerate(steps):
+    for row, (label, distributions) in enumerate([("True kernel", true_distributions), (f"{candidate_name} model", model_distributions)]):
+      grid = np.full((env.dimensions, env.dimensions), np.nan)
+      for state, probability in zip(env.states, distributions[step]):
+        grid[state[1], state[0]] = probability
+
+      image = axes[row, column].imshow(grid, origin="lower", cmap="viridis", vmin=0.0, vmax=1.0)
+      axes[row, column].scatter(*start_state, marker="x", color="red", s=75, linewidth=2)
+      axes[row, column].scatter(*goal_state, marker="*", color="red", s=110)
+      axes[row, column].set_title(f"{label} — step {step}")
+      axes[row, column].set_xlim(0, 10)
+      axes[row, column].set_ylim(0, 10)
+      axes[row, column].set_aspect("equal")
+
+  fig.suptitle(
+      f"{source_agent}: start {start_state}, goal {goal_state}", fontsize=16
+  )
+  fig.colorbar(
+      image, ax=axes, orientation="horizontal", fraction=0.04,
+      pad=0.09, label="State probability"
+  )
+  fig.subplots_adjust(bottom=0.17, top=0.88, hspace=0.28, wspace=0.16)
+  plt.show()
