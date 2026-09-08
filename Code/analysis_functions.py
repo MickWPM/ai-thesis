@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import random
 from scipy.stats import entropy
 from inverse_prediction import get_exact_step_distributions, build_environment_kernel, get_exact_policy_distributions, greedy_policy_from_q
+from planning import value_iteration_for_goal
 
 def state_distribution_to_environment_distribution(state_distribution, env):
   distribution = np.zeros(env.n_states)
@@ -203,3 +205,68 @@ def evaluate_cross_models(env, runs, true_kernel, n_steps):
 
 def cross_matrix(results, metric, AGENT_NAMES):
   return results.groupby(["candidate model", "source policy"])[metric].mean().unstack().reindex(index=AGENT_NAMES, columns=AGENT_NAMES)
+
+def run_live_policy(env, policy, start_state, goal_state, n_rollouts, n_steps, seed):
+  random.seed(seed)
+  arrival_steps = np.full(n_rollouts, n_steps + 1, dtype=int)
+
+  for rollout in range(n_rollouts):
+    state = start_state
+    for step in range(1, n_steps + 1):
+      action = int(policy[env.state_to_index[state]])
+      state = env.move(state, action)
+      if state == goal_state:
+        arrival_steps[rollout] = step
+        break
+
+  steps = np.arange(n_steps + 1)
+  goal_curve = np.array([np.mean(arrival_steps <= step) for step in steps])
+  successful = arrival_steps <= n_steps
+
+  return {
+      "live success rate": successful.mean(),
+      "live goal-curve AUC": goal_curve[1:].mean(),
+      "live mean capped steps": np.minimum(arrival_steps, n_steps).mean(),
+      "live mean successful steps": (arrival_steps[successful].mean() if successful.any() else np.nan)
+  }
+
+
+def evaluate_held_out_planning(env, model_runs, true_kernel, held_out_goals, starts, evaluation_seeds, n_rollouts, n_steps, gamma):
+  candidate_rows = []
+  oracle_rows = []
+
+  for goal_number, goal_state in enumerate(held_out_goals):
+    oracle_policy, _, oracle_iterations = value_iteration_for_goal(env, true_kernel, goal_state, gamma=gamma)
+
+    for start_number, start_state in enumerate(starts):
+      for evaluation_seed in evaluation_seeds:
+        rollout_seed = evaluation_seed + 1_000 * goal_number + 100 * start_number
+        metrics = run_live_policy(env, oracle_policy, start_state, goal_state,n_rollouts, n_steps, rollout_seed)
+        oracle_rows.append({
+            "goal": goal_state,
+            "start": start_state,
+            "evaluation seed": evaluation_seed,
+            "VI iterations": oracle_iterations,
+            **metrics,
+        })
+
+    for run in model_runs:
+      policy, _, iterations = value_iteration_for_goal(env, run["P_hat"], goal_state, gamma=gamma)
+
+      for start_number, start_state in enumerate(starts):
+        for evaluation_seed in evaluation_seeds:
+          rollout_seed = evaluation_seed + 1000 * goal_number + 100 * start_number
+          metrics = run_live_policy(env, policy, start_state, goal_state, n_rollouts, n_steps, rollout_seed)
+          candidate_rows.append({
+              "model": run["name"],
+              "training seed": run["training seed"],
+              "goal": goal_state,
+              "start": start_state,
+              "evaluation seed": evaluation_seed,
+              "VI iterations": iterations,
+              **metrics,
+          })
+
+    print(f"Completed held-out goal {goal_state}")
+
+  return pd.DataFrame(candidate_rows), pd.DataFrame(oracle_rows)
