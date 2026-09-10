@@ -30,13 +30,20 @@ Bellman extraction for both deterministic (special case) and stochastic kernals 
 - Initial goal success metric implemented
 - Complex four rooms implemented where each individual room has a unique environment element.
 
+### Phase 2
+- Value iteration on each agent inferred world model for Planning on held out goals
+- Performance analysis using planning derived Q tables for interaction with live environent.
+- Spearman correlation between Phase 2 and 3 results
+
 ## Current results
 
-Phase 1 progressed well and it is fascinating seeing the probability distributions unfold. Preliminary experimenting shows that we sometimes end up with key differences between inferred trajectories and live trajectories; this is generally mitigated by increased training but can also be indicative of poor goal spread. More generally this is an aspect which we look much further into, particularly in Phase 3
+Phase 1 progressed well and it is fascinating seeing the probability distributions unfold. Preliminary experimenting shows that we sometimes end up with key differences between inferred trajectories and live trajectories; this is generally mitigated by increased training but can also be indicative of poor goal spread.
 
 This image is an example of the resulting probabiilty distribution from 100000 trajectories in both the inferred model (P hat) and the live agent in the environment.
 
 <img width="1193" height="536" alt="comparison" src="https://github.com/user-attachments/assets/0b1836f4-27e0-4a3f-ab29-794e8a1a8d1a" />
 
 
-The initial Phase 2 work with the windy four rooms environment consisted of multiple agents with the same goals and random starts. This did not provide a significant difference as the model experiences were largely comparable. Implementing the complex custom four rooms allowed the development of 'room specialist' agents which only train on a single room and a generalist that has a goal in each room. This gives a more extreme contrast between models; room specialists still gain knowledge of other room dynamics through exploration however the understanding is much more focussed to their particular room. 
+Phase 2 confirmed the agent cross comparison (between policy and inferred world models) and confirmed the theory that the generalist agent results in an inferred world model that results in comparable results as to the policy owner's results on its own inferred world model. This performance was also reflected in the real environment transition generated trajectory copmarisons.
+
+Phase 3 resulted in Value Iteration using the general agent's inferred world model reaching near perfect performance. All Phase 2 ranking metrics were perfectly reflected in Phase 3 assessment results. 
